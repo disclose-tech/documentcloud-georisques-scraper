@@ -1,38 +1,166 @@
 """
-This is a hello world add-on for DocumentCloud.
-
-It demonstrates how to write a add-on which can be activated from the
-DocumentCloud add-on system and run using Github Actions.  It receives data
-from DocumentCloud via the request dispatch and writes data back to
-DocumentCloud using the standard API
+Custom scraper add-on for DocumentCloud.
 """
 
+import datetime
+import os
+import sys
+from urllib.parse import urlparse
+import logging
+
+from documentcloud import DocumentCloud
 from documentcloud.addon import AddOn
 
+import scrapy
+from scrapy.crawler import CrawlerProcess
+from scrapy.utils.project import get_project_settings
 
-class HelloWorld(AddOn):
-    """An example Add-On for DocumentCloud."""
+from scraper import settings as scraper_settings
+from scraper.spiders.georisques_csv import GeorisquesCSVSpider
+
+
+class DiscloseGeorisquesScraper(AddOn):
+    """Scraper for Géorisques documents (https://www.georisques.gouv.fr)."""
+
+    def check_permissions(self):
+        """Check if the user is a verified journalist & can upload a document."""
+
+        self.set_message("Checking permissions...")
+
+        try:
+            user = self.client.users.get("me")
+
+            if not user.verified_journalist:
+                self.set_message(
+                    "You need to be verified to use this add-on. Please verify your "
+                    "account here: https://airtable.com/shrZrgdmuOwW0ZLPM"
+                )
+                self.send_mail(
+                    "You must verify your account to use Disclose's Scraper Add-On",
+                    "You need to be verified to use the scraper add-on. Please verify your "
+                    "account here: https://airtable.com/shrZrgdmuOwW0ZLPM",
+                )
+
+                sys.exit(1)
+        except Exception as e:
+            subject = f"Géorisques Scraper - Error connecting to DocumentCloud"
+            content = f"Error:\n {e.__traceback__}"
+            self.send_mail(subject, content)
+            sys.exit(1)
+
+    def check_access_level(self):
+        """Check that the access level is valid."""
+
+        access_level = self.access_level
+
+        if access_level not in ["public", "organization", "private"]:
+            self.set_message(
+                "Incorrect Access level.",
+                "Must be 'public', 'organization' or 'private'.",
+            )
+            sys.exit(1)
+
+    def get_project_id(self):
+        """Returns the id of the target project."""
+
+        project = self.data["project"]
+
+        try:
+            # if project is an integer, use it as a project ID
+            project = int(project)
+            return project
+        except ValueError:
+            # otherwise, get the project id from its title
+            # or create it if it does not exist
+            project, created = self.client.projects.get_or_create_by_title(project)
+            return project.id
 
     def main(self):
-        """The main add-on functionality goes here."""
-        # fetch your add-on specific data
-        name = self.data.get("name", "world")
+        """Add-on main functionality."""
 
-        self.set_message("Hello World start!")
+        # Add-on inputs
 
-        # add a hello note to the first page of each selected document
-        for document in self.get_documents():
-            # get_documents will iterate through all documents efficiently,
-            # either selected or by query, dependeing on which is passed in
-            document.annotations.create(f"Hello {name}!", 0)
+        self.run_name = self.data.get("run_name", "no name")
 
-        with open("hello.txt", "w+") as file_:
-            file_.write("Hello world!")
-            self.upload_file(file_)
+        self.access_level = self.data["access_level"]
+        self.check_access_level()
 
-        self.set_message("Hello World end!")
-        self.send_mail("Hello World!", "We finished!")
+        self.from_year = self.data.get(
+            "from_year", datetime.date.today().year
+        )  # current year if not set
+
+        self.to_year = self.data.get(
+            "to_year", datetime.date.today().year
+        )  # current year if not set
+
+        self.target_years = range(self.from_year, self.to_year + 1)
+
+        self.upload_limit = self.data.get("upload_limit", 0)
+        self.time_limit = self.data.get(
+            "time_limit", 345
+        )  # Default to 5h45 as Github actions have a 6 hour limit
+
+        self.dry_run = self.data.get("dry_run")
+
+        self.upload_event_data = self.data.get("upload_event_data")
+
+        self.event_data_file = self.data.get("event_data_file")
+
+        self.noindex = self.data.get("noindex")
+        self.email_report = self.data.get("email_report")
+
+        self.selection_only = self.data.get("selection_only")
+
+        if not self.dry_run:
+            try:
+                self.project = self.get_project_id()
+            except Exception as e:
+                raise Exception("Project error").with_traceback(e.__traceback__)
+                sys.exit(1)
+                # TODO : check user has access to the project
+
+            # Check if the user has upload permissions (verified account)
+            self.check_permissions()
+        else:
+            self.project = ""
+
+        # Load scraper settings and create process
+
+        os.environ.setdefault("SCRAPY_SETTINGS_MODULE", scraper_settings.__name__)
+        process = CrawlerProcess(get_project_settings())
+
+        # Launch scraper
+
+        process.crawl(
+            GeorisquesCSVSpider,
+            target_years=self.target_years,
+            upload_limit=self.upload_limit,
+            time_limit=self.time_limit,
+            client=self.client,
+            target_project=self.project,
+            access_level=self.access_level,
+            dry_run=self.dry_run,
+            run_id=self.id,
+            run_name=self.run_name,
+            send_mail=self.send_mail,
+            load_event_data=self.load_event_data,
+            store_event_data=self.store_event_data,
+            upload_file=self.upload_file,
+            upload_event_data=self.upload_event_data,
+            event_data_file=self.event_data_file,
+            noindex=self.noindex,
+            email_report=self.email_report,
+            selection_only=self.selection_only,
+        )
+
+        # Run
+
+        self.set_message(
+            f"Scraping Géorisques documents {str(self.target_years[0])}-{str(self.target_years[-1])} [{self.run_name}]"
+        )
+        process.start()
+        self.set_message("Scraping complete!")
 
 
 if __name__ == "__main__":
-    HelloWorld().main()
+    DiscloseGeorisquesScraper().main()
