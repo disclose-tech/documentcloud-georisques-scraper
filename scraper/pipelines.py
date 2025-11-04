@@ -187,7 +187,7 @@ class UploadPipeline:
             "priorite_nationale": "installation_national_priority",
             "etat_activite": "installation_activity_status",
             "regime": "installation_regime",
-            "adresse": "address",
+            "adresse": "installation_address",
             "code_postal": "installation_postal_code",
             "code_commune_insee": "installation_municipality_insee_code",
             "commune": "installation_municipality",
