@@ -62,6 +62,17 @@ class FullURLPipeline:
         return item
 
 
+class RaisonSocialePipeline:
+    """Guard against missing raison_sociale. Drop the docs silently for now."""
+
+    def process_item(self, item, spider):
+
+        adapter = ItemAdapter(item)
+
+        if not adapter.get("raison_sociale"):
+            SilentDropItem("Missing raison_sociale")
+
+
 class SelectionOnlyPipeline:
 
     def open_spider(self, spider):
