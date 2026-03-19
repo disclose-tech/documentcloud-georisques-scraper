@@ -8,3 +8,6 @@ jobs:
     with:
       timeout: 360
       python-version: 3.11
+    secrets:
+      dc_username: ${{ secrets.DC_USERNAME }}
+      dc_password: ${{ secrets.DC_PASSWORD }}
