@@ -75,6 +75,7 @@ ITEM_PIPELINES = {
     "scraper.pipelines.SelectionOnlyPipeline": 350,
     "scraper.pipelines.UploadLimitPipeline": 400,
     "scraper.pipelines.TagDepartmentsPipeline": 500,
+    "scraper.pipelines.RaisonSocialePipeline": 550,
     "scraper.pipelines.UploadPipeline": 600,
     "scraper.pipelines.MailPipeline": 700,
 }

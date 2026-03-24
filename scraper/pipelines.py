@@ -70,7 +70,7 @@ class RaisonSocialePipeline:
         adapter = ItemAdapter(item)
 
         if not adapter.get("raison_sociale"):
-            SilentDropItem("Missing raison_sociale")
+            raise SilentDropItem("Missing raison_sociale")
 
 
 class SelectionOnlyPipeline:
