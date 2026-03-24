@@ -139,6 +139,8 @@ class UploadPipeline:
         squarelet_logger = logging.getLogger("squarelet")
         squarelet_logger.setLevel(logging.WARNING)
 
+        self._token_obtained_at = datetime.datetime.now()
+
         if not spider.dry_run:
             try:
                 spider.logger.info("Loading event data from DocumentCloud...")
@@ -169,7 +171,22 @@ class UploadPipeline:
             spider.logger.info("No event data was loaded.")
             spider.event_data = {}
 
+    def _refresh_token_if_needed(self, spider):
+        elapsed = (datetime.datetime.now() - self._token_obtained_at).total_seconds()
+        if elapsed > 240:  # 4 minutes
+            try:
+                spider.logger.info(
+                    f"Token refresh attempt at {elapsed:.0f}s. "
+                    f"has_refresh_token={bool(getattr(spider.client, 'refresh_token', None))}"
+                )
+                spider.client._set_tokens()  # squarelet internal method
+                self._token_obtained_at = datetime.datetime.now()
+            except Exception as e:
+                spider.logger.warning(f"Proactive token refresh failed: {e}")
+
     def process_item(self, item, spider):
+
+        self._refresh_token_if_needed(spider)
 
         data = {
             "event_data_key": item["code_aiot"] + "/" + item["identifiant_fichier"],
