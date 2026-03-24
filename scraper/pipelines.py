@@ -139,6 +139,7 @@ class UploadPipeline:
         squarelet_logger = logging.getLogger("squarelet")
         squarelet_logger.setLevel(logging.WARNING)
 
+        self._initial_refresh_token = getattr(spider.client, "refresh_token", None)
         self._token_obtained_at = datetime.datetime.now()
 
         if not spider.dry_run:
@@ -173,13 +174,16 @@ class UploadPipeline:
 
     def _refresh_token_if_needed(self, spider):
         elapsed = (datetime.datetime.now() - self._token_obtained_at).total_seconds()
-        if elapsed > 240:  # 4 minutes
+        if elapsed > 240:
+            # If a previous failed refresh cleared the token, restore the original
+            if not spider.client.refresh_token and self._initial_refresh_token:
+                spider.client.refresh_token = self._initial_refresh_token
             try:
                 spider.logger.info(
                     f"Token refresh attempt at {elapsed:.0f}s. "
                     f"has_refresh_token={bool(getattr(spider.client, 'refresh_token', None))}"
                 )
-                spider.client._set_tokens()  # squarelet internal method
+                spider.client._set_tokens()
                 self._token_obtained_at = datetime.datetime.now()
             except Exception as e:
                 spider.logger.warning(f"Proactive token refresh failed: {e}")
