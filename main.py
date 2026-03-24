@@ -159,7 +159,16 @@ class DiscloseGeorisquesScraper(AddOn):
             f"Scraping Géorisques documents {str(self.target_years[0])}-{str(self.target_years[-1])} [{self.run_name}]"
         )
         process.start()
-        self.set_message("Scraping complete!")
+
+        try:
+            self.set_message("Scraping complete!")
+        except Exception as e:
+            client = self.client
+            logging.error(
+                f"set_message failed. Client state: username={client.username!r}, "
+                f"has_refresh_token={bool(getattr(client, 'refresh_token', None))}, "
+                f"error={e}"
+            )
 
 
 if __name__ == "__main__":
