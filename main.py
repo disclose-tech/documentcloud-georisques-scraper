@@ -78,6 +78,11 @@ class DiscloseGeorisquesScraper(AddOn):
     def main(self):
         """Add-on main functionality."""
 
+        logging.info(
+            f"Payload token present: {bool(getattr(self, 'token', None))}, "
+            f"refresh_token present: {bool(getattr(self, 'refresh_token', None))}"
+        )
+
         # Add-on inputs
 
         self.run_name = self.data.get("run_name", "no name")
