@@ -78,9 +78,9 @@ class DiscloseGeorisquesScraper(AddOn):
     def main(self):
         """Add-on main functionality."""
 
-        logging.info(
-            f"Payload token present: {bool(getattr(self, 'token', None))}, "
-            f"refresh_token present: {bool(getattr(self, 'refresh_token', None))}"
+        # User agent
+        self.client.session.headers.update(
+            {"User-Agent": "Disclose Georisques Scraper Add-On"}
         )
 
         # Add-on inputs
