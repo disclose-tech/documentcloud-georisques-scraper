@@ -239,7 +239,7 @@ class UploadPipeline:
                     title=item["nom"],
                     description=f"{item['raison_sociale']} ({item['code_aiot']})",
                     source="georisques.gouv.fr",
-                    publish_at=item["datetime_dcformat"],
+                    # publish_at=item["datetime_dcformat"],
                     language="fra",
                     access=spider.access_level,
                     data=data,
