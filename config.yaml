@@ -39,7 +39,7 @@ properties:
     title: Dry run
     type: boolean
     description: If true, documents are not uploaded, and event data is not updated.
-    default: false
+    default: true
   upload_event_data:
     title: Upload event_data to DocumentCloud's interface
     type: boolean
