@@ -208,7 +208,7 @@ class UploadPipeline:
         }
 
         adapter = ItemAdapter(item)
-        if adapter.get("departments") and adapter.get("departments_sources"):
+        if adapter.get("departments"):
             data["departments"] = item["departments"]
             data["departments_sources"] = "scraper"
 
@@ -247,11 +247,6 @@ class UploadPipeline:
                 )
         except Exception as e:
             client = spider.client
-            spider.logger.error(
-                f"Upload error. Client state: username={client.username!r}, "
-                f"has_refresh_token={bool(getattr(client, 'refresh_token', None))}, "
-                f"error={e}"
-            )
             raise Exception("Upload error").with_traceback(e.__traceback__)
 
         else:  # No upload error, add to event_data
