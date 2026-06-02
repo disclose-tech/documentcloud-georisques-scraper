@@ -19,7 +19,9 @@ itemloaders==1.4.0
 jmespath==1.1.0
 listcrunch==1.0.1
 lxml==6.1.1
+numpy==2.4.6
 packaging==26.2
+pandas==3.0.3
 parsel==1.11.0
 Protego==0.6.0
 pycparser==3.0
