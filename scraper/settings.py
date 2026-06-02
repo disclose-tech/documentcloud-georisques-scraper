@@ -72,10 +72,11 @@ ITEM_PIPELINES = {
     "scraper.pipelines.ParseDatePipeline": 100,
     "scraper.pipelines.SourceFilenamePipeline": 200,
     "scraper.pipelines.FullURLPipeline": 300,
+    "scraper.pipelines.RaisonSocialePipeline": 320,
     "scraper.pipelines.SelectionOnlyPipeline": 350,
+    "scraper.pipelines.InseeCodePipeline": 380,
     "scraper.pipelines.UploadLimitPipeline": 400,
     "scraper.pipelines.TagDepartmentsPipeline": 500,
-    "scraper.pipelines.RaisonSocialePipeline": 550,
     "scraper.pipelines.UploadPipeline": 600,
     "scraper.pipelines.MailPipeline": 700,
 }

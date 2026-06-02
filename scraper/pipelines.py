@@ -3,21 +3,36 @@
 import datetime
 import re
 import os
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 import logging
 import json
 import hashlib
 
+from scrapy import Request
 from scrapy.exceptions import DropItem
 from itemadapter import ItemAdapter
 
 from .log import SilentDropItem
 
 
+class SpiderPipeline:
+    """Base class for pipelines that need access to the spider instance.
+
+    Provides from_crawler() to store the spider as self.spider, so methods
+    don't need the (deprecated) spider argument.
+    """
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipeline = cls()
+        pipeline.spider = crawler.spider
+        return pipeline
+
+
 class ParseDatePipeline:
     """Parse dates from scraped data."""
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
         """Parses date from the extracted string"""
 
         # Publication/inspection date
@@ -36,7 +51,7 @@ class ParseDatePipeline:
 class SourceFilenamePipeline:
     """Adds the source_filename field based on the url."""
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
 
         path = urlparse(item["url"]).path
 
@@ -46,9 +61,8 @@ class SourceFilenamePipeline:
 
 
 class FullURLPipeline:
-    """"""
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
 
         if item["type_document"] == "Rapport d'inspection":
             item["url"] = (
@@ -65,7 +79,7 @@ class FullURLPipeline:
 class RaisonSocialePipeline:
     """Guard against missing raison_sociale. Drop the docs silently for now."""
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
 
         adapter = ItemAdapter(item)
 
@@ -75,17 +89,17 @@ class RaisonSocialePipeline:
         return item
 
 
-class SelectionOnlyPipeline:
+class SelectionOnlyPipeline(SpiderPipeline):
 
-    def open_spider(self, spider):
+    def open_spider(self):
 
-        if spider.selection_only:
+        if self.spider.selection_only:
 
             with open("selection_installations.json", "r") as json_file:
                 self.selection = json.load(json_file)
 
-    def process_item(self, item, spider):
-        if spider.selection_only:
+    def process_item(self, item):
+        if self.spider.selection_only:
             if item["code_aiot"] in self.selection:
                 return item
             else:
@@ -94,13 +108,111 @@ class SelectionOnlyPipeline:
             return item
 
 
-class UploadLimitPipeline:
+class InseeCodePipeline(SpiderPipeline):
+    """Resolve a missing code_commune_insee via the geopf.fr geocoder.
+
+    Drops (non-silently) any item whose INSEE code cannot be resolved, so
+    documents without it are not uploaded.
+    """
+
+    GEOCODER_URL = "https://data.geopf.fr/geocodage/search/"
+
+    def open_spider(self):
+
+        self.cache = {}
+
+    async def process_item(self, item):
+        adapter = ItemAdapter(item)
+
+        if adapter.get("code_commune_insee"):
+            return item
+
+        code_postal = adapter.get("code_postal")
+        commune = adapter.get("commune")
+        if not code_postal or not commune:
+            raise DropItem(
+                f"No INSEE code and missing postal code/commune "
+                f"(postal={code_postal!r}, commune={commune!r})"
+            )
+
+        cache_key = (code_postal, commune)
+        if cache_key in self.cache:
+            result = self.cache[cache_key]
+            self.spider.logger.debug(
+                f"INSEE cache hit for {commune} ({code_postal})"
+            )
+        else:
+            # A transient lookup failure raises DropItem and is not cached.
+            result = await self.geocode_commune(commune, code_postal)
+            self.cache[cache_key] = result
+
+        if "error" in result:
+            raise DropItem(result["error"])
+
+        item["code_commune_insee"] = result["code_insee"]
+        if result["commune"]:
+            item["commune"] = result["commune"]
+        return item
+
+    async def geocode_commune(self, commune, code_postal):
+        """Geocode (commune, code_postal) -> resolution dict.
+
+        Returns {"code_insee": ..., "commune": <corrected name or None>} on success
+        or {"error": <reason>} for a deterministic miss (both cacheable). Raises
+        DropItem for transient failures so the caller does not cache them.
+        """
+
+        # Géorisques API CSV endpoint exports in ISO-8859-1; some characters
+        # (i.e. "œ") are stored as a literal "?" in the source CSV,
+        # which the geocoder cannot match. Strip it for the query and remember so we
+        # can back-fill the clean name from the result.
+        commune_corrupted = "?" in commune
+        commune_query = commune.replace("?", "").strip() if commune_corrupted else commune
+
+        query = urlencode({"q": f"{code_postal} {commune_query}", "limit": 1})
+        url = f"{self.GEOCODER_URL}?{query}"
+
+        try:
+            response = await self.spider.crawler.engine.download_async(Request(url))
+            features = json.loads(response.text).get("features", [])
+        except Exception as e:
+            raise DropItem(f"INSEE lookup failed for {commune} ({code_postal}): {e}")
+
+        if not features:
+            return {"error": f"No INSEE match for {commune} ({code_postal})"}
+
+        props = features[0]["properties"]
+        code_insee = props.get("citycode")
+        if not code_insee:
+            return {
+                "error": f"No citycode in geocoder result for {commune} ({code_postal})"
+            }
+
+        self.spider.logger.debug(
+            f"Resolved INSEE code {code_insee} for {commune} ({code_postal})"
+        )
+
+        # If the source commune name was corrupted (contained "?"), back-fill the
+        # clean name from the geocoder result. Guard on a matching postcode.
+        corrected = None
+        if commune_corrupted and props.get("postcode") == code_postal:
+            corrected = props.get("city") or props.get("name")
+            if corrected:
+                self.spider.logger.info(
+                    f"Corrected commune name {commune!r} -> {corrected!r}"
+                )
+
+        return {"code_insee": code_insee, "commune": corrected}
+
+
+class UploadLimitPipeline(SpiderPipeline):
     """Sends the signal to close the spider once the upload limit is attained."""
 
-    def open_spider(self, spider):
+    def open_spider(self):
         self.number_of_docs = 0
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
+        spider = self.spider
         self.number_of_docs += 1
 
         if spider.upload_limit == 0 or self.number_of_docs < spider.upload_limit + 1:
@@ -112,7 +224,7 @@ class UploadLimitPipeline:
 
 class TagDepartmentsPipeline:
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
 
         adapter = ItemAdapter(item)
 
@@ -126,14 +238,15 @@ class TagDepartmentsPipeline:
         return item
 
 
-class UploadPipeline:
+class UploadPipeline(SpiderPipeline):
     """Upload document to DocumentCloud & store event data."""
 
     def count_documents(self, event_data):
         """Counts the number of documents in event_data"""
         return sum([len(event_data[x]) for x in event_data.keys()])
 
-    def open_spider(self, spider):
+    def open_spider(self):
+        spider = self.spider
         documentcloud_logger = logging.getLogger("documentcloud")
         documentcloud_logger.setLevel(logging.WARNING)
         squarelet_logger = logging.getLogger("squarelet")
@@ -172,7 +285,8 @@ class UploadPipeline:
             spider.logger.info("No event data was loaded.")
             spider.event_data = {}
 
-    def _refresh_token_if_needed(self, spider):
+    def _refresh_token_if_needed(self):
+        spider = self.spider
         elapsed = (datetime.datetime.now() - self._token_obtained_at).total_seconds()
         if elapsed > 240:
             # If a previous failed refresh cleared the token, restore the original
@@ -188,9 +302,11 @@ class UploadPipeline:
             except Exception as e:
                 spider.logger.warning(f"Proactive token refresh failed: {e}")
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
 
-        self._refresh_token_if_needed(spider)
+        spider = self.spider
+
+        self._refresh_token_if_needed()
 
         data = {
             "event_data_key": item["code_aiot"] + "/" + item["identifiant_fichier"],
@@ -263,8 +379,10 @@ class UploadPipeline:
 
         return item
 
-    def close_spider(self, spider):
+    def close_spider(self):
         """Store event data when the spider closes."""
+
+        spider = self.spider
 
         if not spider.dry_run and spider.run_id:
             spider.store_event_data(spider.event_data)
@@ -293,20 +411,22 @@ class UploadPipeline:
                 )
 
 
-class MailPipeline:
+class MailPipeline(SpiderPipeline):
     """Send scraping run report."""
 
-    def open_spider(self, spider):
+    def open_spider(self):
         self.items_ok = []
         self.items_with_error = []
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
 
         self.items_ok.append(item)
 
         return item
 
-    def close_spider(self, spider):
+    def close_spider(self):
+
+        spider = self.spider
 
         def print_item(item, error=False):
             item_string = f"""
