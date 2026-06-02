@@ -70,6 +70,7 @@ COOKIES_ENABLED = False
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
     "scraper.pipelines.ParseDatePipeline": 100,
+    "scraper.pipelines.CleanTextPipeline": 110,
     "scraper.pipelines.SourceFilenamePipeline": 200,
     "scraper.pipelines.FullURLPipeline": 300,
     "scraper.pipelines.RaisonSocialePipeline": 320,

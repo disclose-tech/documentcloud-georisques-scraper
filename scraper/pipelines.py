@@ -8,6 +8,7 @@ import logging
 import json
 import hashlib
 
+import ftfy
 from scrapy import Request
 from scrapy.exceptions import DropItem
 from itemadapter import ItemAdapter
@@ -45,6 +46,29 @@ class ParseDatePipeline:
             publication_dt.isoformat(timespec="microseconds") + "Z"
         )
 
+        return item
+
+
+class CleanTextPipeline:
+    """Repair encoding artifacts in human-readable text fields.
+
+    The Géorisques source CSVs are mixed-encoding within a single cell: most
+    text is Latin-1 (read correctly), but some establishment names are embedded
+    as UTF-8 bytes (read as mojibake, e.g. "PÃ©zenas"). A handful of fields also
+    contain HTML entities (e.g. "&amp;"). ftfy.fix_text repairs both the partial
+    mojibake and the entities in one pass, and is a no-op on already-correct text.
+    """
+
+    TEXT_FIELDS = ("nom", "raison_sociale", "adresse", "commune")
+
+    def process_item(self, item):
+        adapter = ItemAdapter(item)
+        for field in self.TEXT_FIELDS:
+            value = adapter.get(field)
+            if isinstance(value, str) and value:
+                # unescape_html=True (not "auto") so entities are always
+                # unescaped, even in values that also contain a literal "<".
+                adapter[field] = ftfy.fix_text(value, unescape_html=True)
         return item
 
 
@@ -328,7 +352,7 @@ class UploadPipeline(SpiderPipeline):
             data["departments"] = item["departments"]
             data["departments_sources"] = "scraper"
 
-        # Infos pas toujours présentes
+        # These are not always there
         for k, v in {
             "code_naf": "installation_naf_code",
             "siret": "installation_siret",
