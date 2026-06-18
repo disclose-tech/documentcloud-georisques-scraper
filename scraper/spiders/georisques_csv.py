@@ -22,14 +22,14 @@ def add_installation_adress(item, code_aiot, df_installations):
     liste_champs_adresse = []
     for i in [1, 2, 3]:
         field_value = df_installations.loc[code_aiot][f"adresse{i}"]
-        if not pd.isna(field_value):
+        if field_value:
             liste_champs_adresse.append(
                 str(df_installations.loc[code_aiot][f"adresse{i}"])
             )
 
     adresse_installation = " ".join(liste_champs_adresse).strip()
 
-    if not pd.isna(adresse_installation) and adresse_installation:
+    if adresse_installation:
         item["adresse"] = adresse_installation
 
     return item
@@ -57,7 +57,7 @@ def add_installation_metadata(item, code_aiot, df_installations):
     }.items():
         info_value = df_installations.loc[code_aiot][k]
 
-        if not pd.isna(info_value):
+        if info_value:
             item[v] = info_value
 
     installation_themes = []
@@ -141,6 +141,7 @@ class GeorisquesCSVSpider(scrapy.Spider):
             encoding="ISO-8859-1",
             dtype=str,
         )
+        df_installations.fillna("", inplace=True)
         df_installations.set_index(keys="codeAiot", inplace=True)
 
         if len(df_installations) > 0:
@@ -153,6 +154,7 @@ class GeorisquesCSVSpider(scrapy.Spider):
                 dtype=str,
             )
             df_docs_inspection.dropna(subset=["url"], axis=0, inplace=True)
+            df_docs_inspection.fillna("", inplace=True)
 
             for row in df_docs_inspection.itertuples():
 
@@ -180,6 +182,7 @@ class GeorisquesCSVSpider(scrapy.Spider):
                 dtype=str,
             )
             df_docs_hors_inspection.dropna(subset=["url"], axis=0, inplace=True)
+            df_docs_hors_inspection.fillna("", inplace=True)
 
             for row in df_docs_hors_inspection.itertuples():
                 item = GeorisquesItem(

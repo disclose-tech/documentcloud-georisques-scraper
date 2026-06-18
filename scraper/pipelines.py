@@ -349,12 +349,14 @@ class UploadPipeline(SpiderPipeline):
             if adapter.get(k):
                 data[v] = item[k]
 
+        title = item["nom"] or f"{item['type_document']} ({item['date']})"
+
         try:
             if not spider.dry_run:
                 spider.client.documents.upload(
                     item["url"],
                     project=spider.target_project,
-                    title=item["nom"],
+                    title=title,
                     description=f"{item['raison_sociale']} ({item['code_aiot']})",
                     source="georisques.gouv.fr",
                     # publish_at=item["datetime_dcformat"],
