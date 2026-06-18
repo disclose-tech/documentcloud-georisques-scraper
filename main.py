@@ -165,15 +165,7 @@ class DiscloseGeorisquesScraper(AddOn):
         )
         process.start()
 
-        try:
-            self.set_message("Scraping complete!")
-        except Exception as e:
-            client = self.client
-            logging.error(
-                f"set_message failed. Client state: username={client.username!r}, "
-                f"has_refresh_token={bool(getattr(client, 'refresh_token', None))}, "
-                f"error={e}"
-            )
+        self.set_message("Scraping complete!")
 
 
 if __name__ == "__main__":
