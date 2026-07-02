@@ -15,7 +15,8 @@ class GeorisquesItem(Item):
     nom = Field()
     url = Field()
     source_filename = Field()
-    type_document = Field()
+    original_doc_type = Field()
+    doc_type = Field()
 
     # Installation metadata
     raison_sociale = Field()

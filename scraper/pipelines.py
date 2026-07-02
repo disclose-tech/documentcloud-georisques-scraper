@@ -3,6 +3,7 @@
 import datetime
 import re
 import os
+import unicodedata
 from urllib.parse import urlparse, urlencode
 import logging
 import json
@@ -72,6 +73,48 @@ class CleanTextPipeline:
         return item
 
 
+class DocTypePipeline:
+    """Classify the raw original_doc_type into a normalised doc_type."""
+
+    MAPPING = {
+        "AP d'autorisation":                         "Arrêté préfectoral - Autorisation",
+        "AP de mesures d'évaluations et/ou remèdes": "Arrêté préfectoral - Autre",
+        "AP de rejet":                               "Arrêté préfectoral - Refus ou rejet",
+        "AP enregistrement":                         "Arrêté préfectoral - Enregistrement",
+        "AP mise en demeure":                        "Arrêté préfectoral - Mise en demeure",
+        "AP prescriptions complémentaires":          "Arrêté préfectoral - Prescriptions complémentaires",
+        "AP prescriptions spéciales":                "Arrêté préfectoral - Prescriptions spéciales",
+        "AP refus":                                  "Arrêté préfectoral - Refus ou rejet",
+        "AP servitude d'utilité publique":           "Arrêté préfectoral - Servitude d'utilité publique",
+        "Arrêté de mise en demeure":                 "Arrêté préfectoral - Mise en demeure",
+        "Arrêté préfectoral":                        "Arrêté préfectoral - Autre",
+        "Autre":                                     "Autre",
+        "Autres":                                    "Autre",
+        "Document de procédure":                     "Document de procédure",
+        "Fiche Seveso":                              "Fiche Seveso",
+        "Inspection":                                "Rapport d'inspection",
+        "Opposition explicite":                      "Arrêté préfectoral - Refus ou rejet",
+        "Projet de prescriptions d'un contributeur": "Projet de prescriptions d'un contributeur",
+        "Rapport":                                   "Rapport d'inspection",
+        "Rapport d'AP d'autorisation":               "Arrêté préfectoral - Autorisation",
+        "Rapport d'inspection":                      "Rapport d'inspection",
+    }
+
+    @staticmethod
+    def _strip_accents(s):
+        return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+
+    def process_item(self, item):
+        raw = item["original_doc_type"] or ""
+        if raw in self.MAPPING:
+            item["doc_type"] = self.MAPPING[raw]
+        elif re.search(r"\bAP\b", raw) or "arrete prefectoral" in self._strip_accents(raw).lower():
+            item["doc_type"] = "Arrêté préfectoral - Autre"
+        else:
+            item["doc_type"] = "Autre"
+        return item
+
+
 class SourceFilenamePipeline:
     """Adds the source_filename field based on the url."""
 
@@ -88,7 +131,7 @@ class FullURLPipeline:
 
     def process_item(self, item):
 
-        if item["type_document"] == "Rapport d'inspection":
+        if item["original_doc_type"] == "Rapport d'inspection":
             item["url"] = (
                 f"https://georisques.gouv.fr/webappReport/ws/installations/inspection/{item['identifiant_fichier']}"
             )
@@ -320,7 +363,8 @@ class UploadPipeline(SpiderPipeline):
             "source_file_url": item["url"],
             "source_page_url": item["installation_url"],
             "source_filename": item["source_filename"],
-            "category": item["type_document"],
+            "original_doc_type": item["original_doc_type"],
+            "doc_type": item["doc_type"],
             # Metadonnées installation
             "installation_aiot_code": item["code_aiot"],
         }
@@ -349,7 +393,7 @@ class UploadPipeline(SpiderPipeline):
             if adapter.get(k):
                 data[v] = item[k]
 
-        title = item["nom"] or f"{item['type_document']} ({item['date']})"
+        title = item["nom"] or f"{item['original_doc_type']} ({item['date']})"
 
         try:
             if not spider.dry_run:
@@ -434,7 +478,7 @@ class MailPipeline(SpiderPipeline):
         def print_item(item, error=False):
             item_string = f"""
             title: {item["nom"]}
-            category: {item["type_document"]}
+            original_doc_type: {item["original_doc_type"]}
             publication_date: {item["date"]}
             source_file_url: {item["url"]}
             source_page_url: {item["installation_url"]}

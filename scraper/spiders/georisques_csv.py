@@ -164,7 +164,7 @@ class GeorisquesCSVSpider(scrapy.Spider):
                     identifiant_fichier=row.identifiantFichier,
                     nom=row.nom,
                     url=row.url,
-                    type_document="Rapport d'inspection",
+                    original_doc_type="Rapport d'inspection",
                 )
                 item = add_installation_metadata(item, row.codeAiot, df_installations)
 
@@ -191,7 +191,7 @@ class GeorisquesCSVSpider(scrapy.Spider):
                     identifiant_fichier=row.identifiant,
                     nom=row.nom,
                     url=row.url,
-                    type_document=row.type,
+                    original_doc_type=row.type,
                 )
 
                 item = add_installation_metadata(item, row.codeAiot, df_installations)
