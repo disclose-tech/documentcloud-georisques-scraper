@@ -14,6 +14,7 @@ from scrapy import Request
 from scrapy.exceptions import DropItem
 from itemadapter import ItemAdapter
 
+from .date_corrections import DATE_CORRECTIONS
 from .log import SilentDropItem
 
 
@@ -47,6 +48,19 @@ class ParseDatePipeline:
             publication_dt.isoformat(timespec="microseconds") + "Z"
         )
 
+        return item
+
+
+class DateCorrectionPipeline:
+    """Override dates for specific documents using DATE_CORRECTIONS lookup."""
+
+    def process_item(self, item):
+        corrected = DATE_CORRECTIONS.get(item["identifiant_fichier"])
+        if corrected is not None:
+            item["date"] = corrected
+            dt = datetime.datetime.strptime(corrected, "%Y-%m-%d")
+            item["datetime"] = corrected + " " + dt.strftime("%H:%M:%S UTC")
+            item["datetime_dcformat"] = dt.isoformat(timespec="microseconds") + "Z"
         return item
 
 
