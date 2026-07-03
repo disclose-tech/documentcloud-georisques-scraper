@@ -132,7 +132,14 @@ class DiscloseGeorisquesScraper(AddOn):
         # Load scraper settings and create process
 
         os.environ.setdefault("SCRAPY_SETTINGS_MODULE", scraper_settings.__name__)
-        process = CrawlerProcess(get_project_settings())
+        settings = get_project_settings()
+
+        # Reactor-level backstop for the per-doc time limit in UploadPipeline.
+        # time_limit == 0 disables it, matching the spider.
+        if self.time_limit:
+            settings.set("CLOSESPIDER_TIMEOUT", self.time_limit * 60)
+
+        process = CrawlerProcess(settings)
 
         # Launch scraper
 

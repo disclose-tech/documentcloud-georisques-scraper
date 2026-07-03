@@ -243,7 +243,9 @@ class InseeCodePipeline(SpiderPipeline):
         url = f"{self.GEOCODER_URL}?{query}"
 
         try:
-            response = await self.spider.crawler.engine.download_async(Request(url))
+            # Cap retries/timeout so a failure can't stall for minutes per item.
+            request = Request(url, meta={"max_retry_times": 1, "download_timeout": 10})
+            response = await self.spider.crawler.engine.download_async(request)
             features = json.loads(response.text).get("features", [])
         except Exception as e:
             raise DropItem(f"INSEE lookup failed for {commune} ({code_postal}): {e}")
@@ -355,6 +357,11 @@ class UploadPipeline(SpiderPipeline):
     def process_item(self, item):
 
         spider = self.spider
+
+        # Per-doc time limit: enforces during the upload phase, when the page-level
+        # check no longer fires. Dropping the rest lets the spider close on its own.
+        if spider.time_limit_reached():
+            raise SilentDropItem("Time limit reached.")
 
         data = {
             "event_data_key": item["code_aiot"] + "/" + item["identifiant_fichier"],

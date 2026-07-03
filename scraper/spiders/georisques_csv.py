@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 import os
 import pandas as pd
@@ -85,22 +85,32 @@ class GeorisquesCSVSpider(scrapy.Spider):
 
     upload_limit_attained = False
 
+    time_limit_attained = False
+
+    # Stamped at import (process start) so setup time counts toward the limit.
     start_time = datetime.now()
+
+    def time_limit_reached(self):
+        """Return True (and latch the flag) once the run exceeds its time limit.
+
+        Single source of truth for elapsed time; callers decide how to react.
+        time_limit == 0 disables the limit.
+        """
+
+        if self.time_limit and not self.time_limit_attained:
+            elapsed = (datetime.now() - self.start_time).total_seconds()
+            if elapsed > self.time_limit * 60:
+                self.time_limit_attained = True
+
+        return self.time_limit_attained
 
     def check_time_limit(self):
         """Closes the spider automatically if it reaches a specified duration"""
 
         self.logger.debug(f"Checking time limit ({self.time_limit} min)")
 
-        if self.time_limit != 0:
-
-            limit = self.time_limit * 60
-            now = datetime.now()
-
-            if timedelta.total_seconds(now - self.start_time) > limit:
-                raise CloseSpider(
-                    f"Closed due to time limit ({self.time_limit} minutes)"
-                )
+        if self.time_limit_reached():
+            raise CloseSpider(f"Closed due to time limit ({self.time_limit} minutes)")
 
     def check_upload_limit(self):
         """Closes the spider if the upload limit is attained."""
