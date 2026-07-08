@@ -380,6 +380,11 @@ class UploadPipeline(SpiderPipeline):
         data = {
             "event_data_key": item["code_aiot"] + "/" + item["identifiant_fichier"],
             "source_scraper": f"Géorisques Scraper",
+            # Stamped at upload time so the metadata-updater add-on treats this
+            # document as already-updated 
+            "last_metadata_update": datetime.datetime.now(
+                datetime.timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ"),
             # Metadonnées fichier
             "date": item["date"],
             "datetime": item["datetime"],
