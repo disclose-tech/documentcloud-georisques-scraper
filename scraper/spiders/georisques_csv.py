@@ -35,7 +35,7 @@ def add_installation_adress(item, code_aiot, df_installations):
     return item
 
 
-def add_installation_metadata(item, code_aiot, df_installations):
+def add_installation_metadata(item, code_aiot, df_installations, rubriques_by_aiot):
 
     # URL
 
@@ -74,6 +74,11 @@ def add_installation_metadata(item, code_aiot, df_installations):
 
     if installation_themes:
         item["themes"] = installation_themes
+
+    # Rubriques ICPE de l'installation (nomenclature), dédupliquées et triées
+    rubriques = rubriques_by_aiot.get(code_aiot)
+    if rubriques:
+        item["nomenclature_sections"] = rubriques
 
     item = add_installation_adress(item, code_aiot, df_installations)
 
@@ -154,6 +159,25 @@ class GeorisquesCSVSpider(scrapy.Spider):
         df_installations.fillna("", inplace=True)
         df_installations.set_index(keys="codeAiot", inplace=True)
 
+        # Rubriques ICPE (nomenclature) par installation. Plusieurs lignes par
+        # codeAiot (une par alinéa), donc on agrège en un ensemble trié de
+        # numeroRubrique uniques.
+        df_rubriques = pd.read_csv(
+            extracted_folder_path + "/" + "rubriqueIC.csv",
+            sep=";",
+            encoding="ISO-8859-1",
+            dtype=str,
+        )
+        df_rubriques.fillna("", inplace=True)
+
+        sets_by_aiot = {}
+        for aiot, num in zip(
+            df_rubriques["codeAiot"], df_rubriques["numeroRubrique"]
+        ):
+            if num:
+                sets_by_aiot.setdefault(aiot, set()).add(num)
+        rubriques_by_aiot = {a: sorted(s) for a, s in sets_by_aiot.items()}
+
         if len(df_installations) > 0:
 
             # Rapports d'inspection
@@ -176,7 +200,9 @@ class GeorisquesCSVSpider(scrapy.Spider):
                     url=row.url,
                     original_doc_type="Rapport d'inspection",
                 )
-                item = add_installation_metadata(item, row.codeAiot, df_installations)
+                item = add_installation_metadata(
+                    item, row.codeAiot, df_installations, rubriques_by_aiot
+                )
 
                 if row.codeAiot not in self.event_data:
                     yield item
@@ -204,7 +230,9 @@ class GeorisquesCSVSpider(scrapy.Spider):
                     original_doc_type=row.type,
                 )
 
-                item = add_installation_metadata(item, row.codeAiot, df_installations)
+                item = add_installation_metadata(
+                    item, row.codeAiot, df_installations, rubriques_by_aiot
+                )
 
                 if row.codeAiot not in self.event_data:
                     yield item

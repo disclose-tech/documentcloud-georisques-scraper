@@ -35,3 +35,4 @@ class GeorisquesItem(Item):
     installation_url = Field()
 
     themes = Field()
+    nomenclature_sections = Field()

@@ -413,6 +413,7 @@ class UploadPipeline(SpiderPipeline):
             "commune": "installation_municipality",
             "raison_sociale": "installation_name",
             "themes": "installation_topics",
+            "nomenclature_sections": "installation_nomenclature_sections",
         }.items():
             if adapter.get(k):
                 data[v] = item[k]
