@@ -18,6 +18,40 @@ from .date_corrections import DATE_CORRECTIONS
 from .log import SilentDropItem
 
 
+# File extensions to drop from the end of a title. Whitelisted deliberately:
+# stripping any trailing ".something" would also eat date fragments ("AP du
+# 12.03.2024"), abbreviations the source really uses (".geo", ".ic", ".vf") and
+# company forms ("Rapport S.A.R.L").
+TITLE_EXTENSIONS = ["pdf", "pdfa", "doc", "docx", "odt", "rtf", "txt"]
+
+# One or more of those extensions (case-insensitive)at the very end of the title
+TITLE_EXTENSIONS_RE = re.compile(
+    r"(?:\s*\.(?:" + "|".join(TITLE_EXTENSIONS) + r"))+$", re.IGNORECASE
+)
+
+
+def beautify_title(title):
+    """Beautify a document title, removing underscores and trailing spaces
+
+    "2023_1764_RAP_NOVAWOOD__VI-27-06-2023.pdf"
+        -> "2023 1764 RAP NOVAWOOD VI-27-06-2023"
+    """
+
+    beautified = title.replace("_", " ")
+
+    # Replace consecutive whitespace characters with a single space
+    # then drop any leading or trailing whitespace
+    beautified = re.sub(r"\s+", " ", beautified).strip()
+
+    # Underscores have been handled above, so filenames with a trailing underscore
+    # i.e. "rapport.pdf_" are correctly removed.
+    beautified = TITLE_EXTENSIONS_RE.sub("", beautified).strip()
+
+    # DocumentCloud rejects an empty title, so if beautifying consumed the whole
+    # value (a name made only of underscores, say) keep the raw one.
+    return beautified or title
+
+
 class SpiderPipeline:
     """Base class for pipelines that need access to the spider instance.
 
@@ -129,6 +163,17 @@ class DocTypePipeline:
             item["doc_type"] = "Arrêté préfectoral - Autre"
         else:
             item["doc_type"] = "Autre"
+        return item
+
+
+class TitlePipeline:
+    """Derive a beautified title, keeping the raw value in the `original_filename` metadata"""
+
+    def process_item(self, item):
+        # A missing nom falls back to type + date, as DocumentCloud requires a title.
+        original = item["nom"] or f"{item['original_doc_type']} ({item['date']})"
+        item["original_filename"] = original
+        item["title"] = beautify_title(original)
         return item
 
 
@@ -392,6 +437,7 @@ class UploadPipeline(SpiderPipeline):
             "source_file_url": item["url"],
             "source_page_url": item["installation_url"],
             "source_filename": item["source_filename"],
+            "original_filename": item["original_filename"],
             "original_doc_type": item["original_doc_type"],
             "doc_type": item["doc_type"],
             # Metadonnées installation
@@ -423,14 +469,12 @@ class UploadPipeline(SpiderPipeline):
             if adapter.get(k):
                 data[v] = item[k]
 
-        title = item["nom"] or f"{item['original_doc_type']} ({item['date']})"
-
         try:
             if not spider.dry_run:
                 spider.client.documents.upload(
                     item["url"],
                     project=spider.target_project,
-                    title=title,
+                    title=item["title"],
                     description=f"{item['raison_sociale']} ({item['code_aiot']})",
                     source="georisques.gouv.fr",
                     # publish_at=item["datetime_dcformat"],
@@ -507,7 +551,8 @@ class MailPipeline(SpiderPipeline):
 
         def print_item(item, error=False):
             item_string = f"""
-            title: {item["nom"]}
+            title: {item["title"]}
+            original_filename: {item["original_filename"]}
             original_doc_type: {item["original_doc_type"]}
             publication_date: {item["date"]}
             source_file_url: {item["url"]}

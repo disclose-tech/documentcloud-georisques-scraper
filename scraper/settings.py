@@ -73,6 +73,7 @@ ITEM_PIPELINES = {
     "scraper.pipelines.DateCorrectionPipeline": 105,
     "scraper.pipelines.CleanTextPipeline": 110,
     "scraper.pipelines.DocTypePipeline": 115,
+    "scraper.pipelines.TitlePipeline": 120,
     "scraper.pipelines.SourceFilenamePipeline": 200,
     "scraper.pipelines.FullURLPipeline": 300,
     "scraper.pipelines.RaisonSocialePipeline": 320,

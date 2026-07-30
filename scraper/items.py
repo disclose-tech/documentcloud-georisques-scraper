@@ -13,6 +13,8 @@ class GeorisquesItem(Item):
     datetime_dcformat = Field()
     identifiant_fichier = Field()
     nom = Field()
+    title = Field()
+    original_filename = Field()
     url = Field()
     source_filename = Field()
     original_doc_type = Field()
