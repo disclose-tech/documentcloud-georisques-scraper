@@ -117,6 +117,12 @@ class GeorisquesCSVSpider(scrapy.Spider):
         if self.time_limit_reached():
             raise CloseSpider(f"Closed due to time limit ({self.time_limit} minutes)")
 
+    def is_known(self, code_aiot, file_id):
+        """Whether the file was already uploaded (archived or live event data)."""
+        return file_id in self.archived_event_data.get(
+            code_aiot, ()
+        ) or file_id in self.event_data.get(code_aiot, ())
+
     def check_upload_limit(self):
         """Closes the spider if the upload limit is attained."""
         if self.upload_limit_attained:
@@ -204,9 +210,7 @@ class GeorisquesCSVSpider(scrapy.Spider):
                     item, row.codeAiot, df_installations, rubriques_by_aiot
                 )
 
-                if row.codeAiot not in self.event_data:
-                    yield item
-                elif item["identifiant_fichier"] not in self.event_data[row.codeAiot]:
+                if not self.is_known(row.codeAiot, item["identifiant_fichier"]):
                     yield item
 
             # Documents hors inspection
@@ -234,9 +238,7 @@ class GeorisquesCSVSpider(scrapy.Spider):
                     item, row.codeAiot, df_installations, rubriques_by_aiot
                 )
 
-                if row.codeAiot not in self.event_data:
-                    yield item
-                elif item["identifiant_fichier"] not in self.event_data[row.codeAiot]:
+                if not self.is_known(row.codeAiot, item["identifiant_fichier"]):
                     yield item
 
         # Next page
