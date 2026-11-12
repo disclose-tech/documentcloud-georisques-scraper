@@ -146,7 +146,7 @@ tldextract==5.3.2
     # via scrapy
 token-bucket==0.4.0
     # via python-documentcloud
-twisted==26.4.0
+twisted==26.10.0
     # via scrapy
 typing-extensions==4.16.0
     # via twisted
