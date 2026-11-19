@@ -53,6 +53,16 @@ def beautify_title(title):
     return beautified or title
 
 
+TITLE_FORMAT = "v2"
+
+
+def build_title(doc_type, original):
+    """`<doc_type> - <beautified filename>`; the filename alone for `Autre`, whose content is the filename."""
+    if not doc_type or doc_type == "Autre":
+        return beautify_title(original)
+    return f"{doc_type} - {beautify_title(original)}"
+
+
 class SpiderPipeline:
     """Base class for pipelines that need access to the spider instance.
 
@@ -126,29 +136,29 @@ class DocTypePipeline:
     """Classify the raw original_doc_type into a normalised doc_type."""
 
     MAPPING = {
-        "AP d'autorisation":                         "Arrêté préfectoral - Autorisation",
-        "AP de mesures d'évaluations et/ou remèdes": "Arrêté préfectoral - Autre",
-        "AP de rejet":                               "Arrêté préfectoral - Refus ou rejet",
-        "AP enregistrement":                         "Arrêté préfectoral - Enregistrement",
-        "AP levée de mise en demeure":               "Arrêté préfectoral - Levée de mise en demeure",
-        "AP mesures conservatoires":                 "Arrêté préfectoral - Mesures conservatoires",
-        "AP mesures d'urgence":                      "Arrêté préfectoral - Mesures d'urgence",
-        "AP mise en demeure":                        "Arrêté préfectoral - Mise en demeure",
-        "AP prescriptions complémentaires":          "Arrêté préfectoral - Prescriptions complémentaires",
-        "AP prescriptions spéciales":                "Arrêté préfectoral - Prescriptions spéciales",
-        "AP refus":                                  "Arrêté préfectoral - Refus ou rejet",
-        "AP servitude d'utilité publique":           "Arrêté préfectoral - Servitude d'utilité publique",
-        "Arrêté de mise en demeure":                 "Arrêté préfectoral - Mise en demeure",
-        "Arrêté préfectoral":                        "Arrêté préfectoral - Autre",
+        "AP d'autorisation":                         "Arrêté préfectoral d'autorisation",
+        "AP de mesures d'évaluations et/ou remèdes": "Autre arrêté préfectoral",
+        "AP de rejet":                               "Arrêté préfectoral de refus ou rejet",
+        "AP enregistrement":                         "Arrêté préfectoral d'enregistrement",
+        "AP levée de mise en demeure":               "Arrêté préfectoral de levée de mise en demeure",
+        "AP mesures conservatoires":                 "Arrêté préfectoral de mesures conservatoires",
+        "AP mesures d'urgence":                      "Arrêté préfectoral de mesures d'urgence",
+        "AP mise en demeure":                        "Arrêté préfectoral de mise en demeure",
+        "AP prescriptions complémentaires":          "Arrêté préfectoral de prescriptions complémentaires",
+        "AP prescriptions spéciales":                "Arrêté préfectoral de prescriptions spéciales",
+        "AP refus":                                  "Arrêté préfectoral de refus ou rejet",
+        "AP servitude d'utilité publique":           "Arrêté préfectoral de servitude d'utilité publique",
+        "Arrêté de mise en demeure":                 "Arrêté préfectoral de mise en demeure",
+        "Arrêté préfectoral":                        "Autre arrêté préfectoral",
         "Autre":                                     "Autre",
         "Autres":                                    "Autre",
         "Document de procédure":                     "Document de procédure",
         "Fiche Seveso":                              "Fiche Seveso",
         "Inspection":                                "Rapport d'inspection",
-        "Opposition explicite":                      "Arrêté préfectoral - Refus ou rejet",
+        "Opposition explicite":                      "Arrêté préfectoral de refus ou rejet",
         "Projet de prescriptions d'un contributeur": "Projet de prescriptions d'un contributeur",
         "Rapport":                                   "Rapport d'inspection",
-        "Rapport d'AP d'autorisation":               "Arrêté préfectoral - Autorisation",
+        "Rapport d'AP d'autorisation":               "Arrêté préfectoral d'autorisation",
         "Rapport d'inspection":                      "Rapport d'inspection",
     }
 
@@ -161,7 +171,7 @@ class DocTypePipeline:
         if raw in self.MAPPING:
             item["doc_type"] = self.MAPPING[raw]
         elif re.search(r"\bAP\b", raw) or "arrete prefectoral" in self._strip_accents(raw).lower():
-            item["doc_type"] = "Arrêté préfectoral - Autre"
+            item["doc_type"] = "Autre arrêté préfectoral"
         else:
             item["doc_type"] = "Autre"
         return item
@@ -171,10 +181,13 @@ class TitlePipeline:
     """Derive a beautified title, keeping the raw value in the `original_filename` metadata"""
 
     def process_item(self, item):
-        # A missing nom falls back to type + date, as DocumentCloud requires a title.
-        original = item["nom"] or f"{item['original_doc_type']} ({item['date']})"
-        item["original_filename"] = original
-        item["title"] = beautify_title(original)
+        if item["nom"]:
+            item["original_filename"] = item["nom"]
+            item["title"] = build_title(item["doc_type"], item["nom"])
+        else:
+            # DocumentCloud requires a title; type + date, without repeating the type.
+            item["original_filename"] = f"{item['original_doc_type']} ({item['date']})"
+            item["title"] = f"{item['doc_type']} ({item['date']})"
         return item
 
 
@@ -500,6 +513,7 @@ class UploadPipeline(SpiderPipeline):
             "original_filename": item["original_filename"],
             "original_doc_type": item["original_doc_type"],
             "doc_type": item["doc_type"],
+            "title_format": TITLE_FORMAT,
             # Metadonnées installation
             "installation_aiot_code": item["code_aiot"],
         }
