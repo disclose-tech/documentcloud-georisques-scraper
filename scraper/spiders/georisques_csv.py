@@ -10,7 +10,8 @@ from scrapy.exceptions import CloseSpider
 
 from ..items import GeorisquesItem
 
-PAGE_SIZE = 6000
+# Géorisques cuts large CSV pages during download
+PAGE_SIZE = 2000
 
 CSV_ENDPOINT = "https://georisques.gouv.fr/api/v1/csv/installations_classees?page_size={page_size}&page={page}"
 
